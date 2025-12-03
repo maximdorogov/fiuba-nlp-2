@@ -25,7 +25,9 @@ if "messages" not in st.session_state:
 
 @st.cache_resource
 def initialize_models():
-    """Initialize models and connections (cached for performance)"""
+    """
+    Initialize models and connections (cached for performance)
+    """
 
     # Get API keys
     groq_api_key = os.getenv("GROQ_API_KEY")
@@ -117,13 +119,11 @@ for message in st.session_state.messages:
             with st.expander("📄 Retrieved Context"):
                 st.text(message["context"])
 
-# Chat input
-if user_query := st.chat_input("Ask me anything..."):
+user_query = st.chat_input("Ask me anything...")
+if user_query:
 
-    # Add user message to chat history
     st.session_state.messages.append({"role": "user", "content": user_query})
 
-    # Display user message
     with st.chat_message("user"):
         st.markdown(user_query)
 
@@ -158,7 +158,6 @@ if user_query := st.chat_input("Ask me anything..."):
 
                 response_text = response.content
 
-                # Display response
                 st.markdown(response_text)
 
                 # Show retrieved context in expander

@@ -30,8 +30,8 @@ if __name__ == "__main__":
 
     prompt = ChatPromptTemplate.from_template(
         """
-        You are a helpful AI assistant. Answer the question based on the context provided.
-        If the context doesn't contain the answer, say so clearly.
+        You are a helpful AI assistant. Answer the question based on the 
+        context provided. If the context doesn't contain the answer, say so clearly.
 
         Context:
         {context}

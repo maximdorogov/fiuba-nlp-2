@@ -52,12 +52,12 @@ if __name__ == "__main__":
                         help=('Document chunk size after splitting'),
                         type=int,
                         required=False,
-                        default=1000)
+                        default=100)
     parser.add_argument('-co', '--chunk_overlap',
                         help=('Overlap between chunks after splitting'),
                         type=int,
                         required=False,
-                        default=90)
+                        default=20)
     parser.add_argument('-n', '--pinecone_index_name',
                         help=('Pinecone index name'),
                         type=str,
