@@ -49,3 +49,17 @@ Go to `http://localhost:8501` in your web browser to interact with the chatbot. 
 
 ![Chatbot Interface](assets/thumb.png)
 
+## Run the Agentic Q&A Application
+
+Export the necessary API keys:
+
+```sh
+export PINECONE_API_KEY="your_pinecone_api_key"
+export GROQ_API_KEY="your_groq_api_key"
+```
+
+Run the app:
+
+```sh
+streamlit run streamlit_agentic_chatbot.py
+```
