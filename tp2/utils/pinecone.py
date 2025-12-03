@@ -1,6 +1,7 @@
+from __future__ import annotations
 from time import time
+from typing import Dict, List, Any
 from pinecone import Pinecone, ServerlessSpec
-
 
 
 def create_pinecone_index(
@@ -47,3 +48,41 @@ def create_pinecone_index(
         print(f"❌ Error creating index '{index_name}': {e}")
 
     return True
+
+def query_pinecone_db(
+    pinecone: Pinecone,
+    index_name: str,
+    query: str,
+    model: 'transformers.AutoModel',
+    top_k: int = 3,
+) -> List[str]:
+    """
+    Makes a query to the Pinecone index and retrieves similar documents.
+
+    Parameters
+    ----------
+    pinecone : Pinecone
+        An initialized Pinecone client instance.
+    index_name : str
+        The name of the Pinecone index to query.
+    query : str
+        The query string to search for similar documents.
+    model : transformers.AutoModel
+        The model used to generate embeddings for the query.
+    top_k : int
+        The number of top similar documents to retrieve (default is 3).
+    
+    Returns
+    -------
+    List[str]
+        A list of texts from the retrieved documents.
+    """
+    index = pinecone.Index(index_name)
+    query_embedding = model.encode(query)
+
+    results = index.query(
+        vector=query_embedding.tolist(),
+        top_k=top_k,
+        include_metadata=True,
+    )
+    return [match.metadata['text'] for match in results.matches]
