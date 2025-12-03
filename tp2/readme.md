@@ -26,6 +26,10 @@ python db_builder.py -d ./dataset/ -m jinaai/jina-embeddings-v2-small-en -n cv-e
 ```
 >NOTE: The only supported model for embeddings is `jinaai/jina-embeddings-v2-small-en`. Its being used in the chatbot for document retrieval and must be also used here to create the embeddings. 
 
+Once the script finishes, you should see a Pinecone index named `cv-embeddings` populated with document embeddings in your Pinecone dashboard:
+
+![Chatbot Interface](assets/pinecone.png)
+
 ## Run the Q&A Application
 
 Export the necessary API keys:
