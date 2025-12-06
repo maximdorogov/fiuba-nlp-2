@@ -1,3 +1,11 @@
+"""
+Script to create a Pinecone vector database from multiple files
+1. Each file will have its own index in Pinecone.
+2. The index name will be derived from the file name.
+3. Each file must be named as cv-<person name/id>.pdf
+"""
+
+from typing import List
 import argparse
 import os
 
@@ -25,16 +33,12 @@ if __name__ == "__main__":
                         help=('Document chunk size after splitting'),
                         type=int,
                         required=False,
-                        default=100)
+                        default=200)
     parser.add_argument('-co', '--chunk_overlap',
                         help=('Overlap between chunks after splitting'),
                         type=int,
                         required=False,
                         default=20)
-    parser.add_argument('-n', '--pinecone_index_name',
-                        help=('Pinecone index name'),
-                        type=str,
-                        required=True)
     parser.add_argument('-m', '--embedding_model_name',
                         help=('hugginface model for embedding generation'
                         ),
@@ -46,6 +50,7 @@ if __name__ == "__main__":
                         help=('Enable verbose output'),
                         action='store_true')
     args = parser.parse_args()
+
 
     model = AutoModel.from_pretrained(
         args.embedding_model_name, trust_remote_code=True)
@@ -77,6 +82,8 @@ if __name__ == "__main__":
         )
         embeddings.append(doc_emb)
 
+    # --- Create Pinecone indexes and upload embeddings ---
+
     # Get credentials from environment variables
     api_key = os.getenv("PINECONE_API_KEY")
     environment = os.getenv("PINECONE_ENVIRONMENT", "us-west1-gcp")
@@ -86,19 +93,24 @@ if __name__ == "__main__":
         environment=environment
     )
 
-    create_pinecone_index(
-        index_name=args.pinecone_index_name,
-        pinecone=pinecone,
-        vector_dim=len(embeddings[0][0]),
-        distance="cosine"
-    )
+    for doc_path, splits, doc_emb in zip(document_paths, splitted_docs, embeddings):
+        doc_name = os.path.basename(doc_path)
+        index_name = os.path.splitext(doc_name)[0]  # Use file name without extension
 
-    index = pinecone.Index(args.pinecone_index_name)
+        if args.verbose:
+            print(f"Creating Pinecone index: {index_name}")
 
-    # insert embeddings into the index
-    db_entries = list()
-    for i, (doc_emb, doc_path, splits) in enumerate(
-        zip(embeddings, document_paths, splitted_docs)):
+        # Create Pinecone index
+        create_pinecone_index(
+            index_name=index_name,
+            pinecone=pinecone,
+            vector_dim=len(embeddings[0][0]),
+            distance="cosine"
+        )
+        index = pinecone.Index(index_name)
+
+        # insert embeddings into the index
+        db_entries = list()
 
         for emb, chunk in zip(doc_emb, splits):
             meta = RagMetadata(
@@ -110,9 +122,5 @@ if __name__ == "__main__":
                 values=emb,
                 metadata=meta
             ).model_dump())
-    index.upsert(vectors=db_entries)
-    
-    # check index stats
-    stats = index.describe_index_stats()
-    print(f"   📊 Total vectors: {stats['total_vector_count']}")
-    print(f"   📏 Dimension: {stats['dimension']}")
+        index.upsert(vectors=db_entries)
+
