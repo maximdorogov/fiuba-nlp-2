@@ -22,7 +22,9 @@ _default_index = "cv-maxim-dorogov"
 
 
 def set_global_clients(pinecone_client: Pinecone, embedding_model: AutoModel, default_index: str = "cv-maxim-dorogov"):
-    """Set global clients for tools to use"""
+    """
+    Set global clients for services to use
+    """
     global _pinecone_client, _embedding_model, _default_index
     _pinecone_client = pinecone_client
     _embedding_model = embedding_model
@@ -34,11 +36,13 @@ def extract_person_name(query: str) -> str:
     """
     Extract person names from the query using LLM.
     
-    Args:
-        query: The user's question
-        
-    Returns:
-        Comma-separated names in lowercase with underscores (e.g., 'john_doe,jane_smith') or 'NONE' if no names found
+    Parameters
+    ----------
+    query: The user's question
+
+    Returns
+    -------
+    Comma-separated names in lowercase with underscores (e.g., 'john_doe,jane_smith') or 'NONE' if no names found
     """
     llm = ChatGroq(
         groq_api_key=os.getenv("GROQ_API_KEY"),
@@ -75,7 +79,8 @@ def get_available_indexes() -> str:
     """
     Get list of available Pinecone indexes.
         
-    Returns:
+    Returns
+    -------
         Comma-separated list of index names
     """
     try:
@@ -89,13 +94,18 @@ def get_available_indexes() -> str:
 def search_person_context(person_name: str, query: str, top_k: int = 3) -> str:
     """
     Search for context in the appropriate Pinecone index(es) based on person name(s).
-    
-    Args:
-        person_name: Name(s) of person(s) - can be single name, comma-separated names, or 'NONE' for default. Use lowercase with underscores.
-        query: The search query about the person/people
-        top_k: Number of results to retrieve per person (default: 3)
-        
-    Returns:
+
+    Parameters
+    ----------
+    person_name: 
+        Name(s) of person(s) - can be single name, comma-separated names, or 'NONE' for default. Use lowercase with underscores.
+    query: 
+        The search query about the person/people
+    top_k: 
+        Number of results to retrieve per person (default: 3)
+
+    Returns
+    -------
         Retrieved context from the appropriate CV index(es)
     """
     available_indexes = [idx.name for idx in _pinecone_client.list_indexes()]
@@ -166,10 +176,13 @@ def create_agentic_rag_system(default_index: str = "cv-maxim-dorogov"):
     """
     Create an agentic RAG system with routing capabilities.
     
-    Args:
-        default_index: Default index name when no person is specified
+    Parameters
+    ----------
+    default_index: str
+        Default index name when no person is specified
     
-    Returns:
+    Returns
+    -------
         Tuple of (agent_executor, pinecone_client, embedding_model)
     """
     # Initialize components
