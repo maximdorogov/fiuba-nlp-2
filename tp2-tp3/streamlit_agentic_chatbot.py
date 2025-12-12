@@ -1,191 +1,156 @@
 import os
 import streamlit as st
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_groq import ChatGroq
-from pinecone import Pinecone
-from transformers import AutoModel
+from agents import create_agentic_rag_system
 
-from utils.pinecone import query_pinecone_db
-
-
-# Page configuration
 st.set_page_config(
-    page_title="RAG Chatbot",
+    page_title="Agentic RAG Chatbot",
     page_icon="🤖",
     layout="wide"
 )
 
-st.title("🤖 RAG Chatbot with Pinecone & Groq")
-st.markdown("Ask me anything about the knowledge base!")
+st.title("🤖 Agentic RAG Chatbot with LangChain")
+st.markdown("Ask me about people's CVs - I'll intelligently route your query to the right knowledge base!")
 
-# Initialize session state for chat history
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-
 @st.cache_resource
-def initialize_models():
-    """
-    Initialize models and connections (cached for performance)
-    """
-
-    # Get API keys
+def initialize_agent_system():
     groq_api_key = os.getenv("GROQ_API_KEY")
     pinecone_api_key = os.getenv("PINECONE_API_KEY")
-
     if not groq_api_key or not pinecone_api_key:
         st.error("⚠️ Please set GROQ_API_KEY and PINECONE_API_KEY environment variables!")
         st.stop()
+    with st.spinner("🔧 Initializing agentic RAG system..."):
+        agent_executor, pinecone_client, embedding_model = create_agentic_rag_system()
+    return agent_executor, pinecone_client, embedding_model
 
-    # Initialize embedding model
-    with st.spinner("Loading embedding model..."):
-        embedding_model = AutoModel.from_pretrained(
-            'jinaai/jina-embeddings-v2-small-en', 
-            trust_remote_code=True
-        )
+agent_executor, pinecone_client, embedding_model = initialize_agent_system()
 
-    # Initialize Pinecone
-    pinecone = Pinecone(
-        api_key=pinecone_api_key,
-        environment=os.getenv("PINECONE_ENVIRONMENT", "us-west1-gcp")
-    )
-
-    # Initialize Groq LLM
-    groq_chat = ChatGroq(
-        groq_api_key=groq_api_key,
-        model_name="llama-3.3-70b-versatile",
-        temperature=0.7,
-        max_tokens=1000,
-    )
-
-    # Create RAG prompt
-    prompt = ChatPromptTemplate.from_template(
-        """You are a helpful AI assistant. Answer the question based on the 
-        context provided. If the context doesn't contain the answer, say so 
-        clearly and don't make up information.
-
-        Context:
-        {context}
-
-        Question: {question}
-
-        Answer:"""
-    )
-
-    # Create chain
-    chain = prompt | groq_chat
-
-    return embedding_model, pinecone, chain
-
-
-# Initialize models
-embedding_model, pinecone, chain = initialize_models()
-
-# Sidebar configuration
 with st.sidebar:
     st.header("⚙️ Settings")
-
-    index_name = st.text_input(
-        "Pinecone Index Name",
-        value="cv-embeddings",
-        help="The name of your Pinecone index"
-    )
-
-    top_k = st.slider(
-        "Number of documents to retrieve",
-        min_value=1,
-        max_value=10,
-        value=3,
-        help="How many relevant documents to fetch from the vector database"
-    )
-
+    st.markdown("### 📚 Available Indexes")
+    try:
+        indexes = list(pinecone_client.list_indexes())
+        if indexes:
+            for idx in indexes:
+                st.markdown(f"✓ `{idx.name}`")
+        else:
+            st.info("No indexes found")
+    except Exception as e:
+        st.error(f"Error listing indexes: {e}")
     st.divider()
-
     if st.button("🗑️ Clear Chat History"):
         st.session_state.messages = []
         st.rerun()
-
     st.divider()
     st.markdown("### 📊 Stats")
     st.metric("Messages", len(st.session_state.messages))
+    st.divider()
+    st.markdown("### 💡 How it works")
+    st.markdown("""
+    1. **Extract Name**: Identifies person mentioned in your query
+    2. **Route Query**: Selects appropriate CV index
+    3. **Retrieve Context**: Fetches relevant information
+    4. **Generate Answer**: Creates response based on context
+    """)
+    st.divider()
+    st.markdown("### 🎯 Example Queries")
+    st.markdown("""
+    - "What is the work experience?"
+    - "Tell me about Maxim Dorogov's education"
+    - "What skills does John Doe have?"
+    """)
 
-# Display chat history
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
+        if message["role"] == "assistant" and "steps" in message and message["steps"]:
+            with st.expander("🧠 Agent's Internal Thinking", expanded=False):
+                for i, step in enumerate(message["steps"], 1):
+                    st.markdown(f"### 🔧 Step {i}: {step['tool']}")
+                    st.markdown("**📥 Tool Input:**")
+                    if isinstance(step['input'], dict):
+                        for key, value in step['input'].items():
+                            st.markdown(f"- `{key}`: {value}")
+                    else:
+                        st.code(str(step['input']), language="text")
+                    st.markdown("**📤 Tool Output:**")
+                    output_text = str(step['output'])
+                    if len(output_text) > 1000:
+                        st.text_area("Output", output_text, height=200, disabled=True, key=f"out_{id(message)}_{i}")
+                    else:
+                        st.code(output_text, language="text")
+                    if i < len(message["steps"]):
+                        st.markdown("---")
 
-        # Show context if available
-        if message["role"] == "assistant" and "context" in message:
-            with st.expander("📄 Retrieved Context"):
-                st.text(message["context"])
-
-user_query = st.chat_input("Ask me anything...")
+user_query = st.chat_input("Ask me anything about CVs...")
 if user_query:
-
     st.session_state.messages.append({"role": "user", "content": user_query})
-
     with st.chat_message("user"):
         st.markdown(user_query)
-
-    # Display assistant response
     with st.chat_message("assistant"):
+        thinking_placeholder = st.empty()
+        response_placeholder = st.empty()
+        steps_container = st.expander("🧠 Agent's Internal Thinking (Live)", expanded=True)
+        try:
+            with thinking_placeholder:
+                st.info("🤖 Agent is analyzing your query...")
+            result = agent_executor.invoke({"input": user_query})
+            response_text = result.get("output", "No response generated")
+            thinking_placeholder.empty()
+            response_placeholder.markdown(response_text)
+            
+            steps_data = []
+            if "intermediate_steps" in result and result["intermediate_steps"]:
+                with steps_container:
+                    for i, (action, observation) in enumerate(result["intermediate_steps"], 1):
+                        st.markdown(f"### 🔧 Step {i}: `{action.tool}`")
+                        st.markdown("**📥 Tool Input:**")
+                        tool_input = action.tool_input
+                        if isinstance(tool_input, dict):
+                            for key, value in tool_input.items():
+                                st.markdown(f"- **{key}**: `{value}`")
+                        else:
+                            st.code(str(tool_input), language="text")
+                        st.markdown("**📤 Tool Output:**")
+                        observation_text = str(observation)
+                        if len(observation_text) > 800:
+                            st.text(observation_text[:800] + "...")
+                            with st.expander("📄 Show full output"):
+                                st.code(observation_text, language="text")
+                        else:
+                            st.code(observation_text, language="text")
+                        if hasattr(action, 'log') and action.log:
+                            st.markdown("**💭 Agent's Thought Process:**")
+                            st.info(action.log[:500])
+                        if i < len(result["intermediate_steps"]):
+                            st.markdown("---")
+                        steps_data.append({
+                            "tool": action.tool,
+                            "input": action.tool_input if isinstance(action.tool_input, dict) else str(action.tool_input),
+                            "output": str(observation)[:500]
+                        })
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": response_text,
+                "steps": steps_data
+            })
+            st.success("✅ Response generated successfully!")
+        except Exception as e:
+            thinking_placeholder.empty()
+            error_msg = f"❌ Error: {str(e)}"
+            response_placeholder.error(error_msg)
+            import traceback
+            with st.expander("🐛 Error Details"):
+                st.code(traceback.format_exc())
+            st.session_state.messages.append({"role": "assistant", "content": error_msg})
 
-        # Retrieve context
-        with st.spinner("🔍 Searching knowledge base..."):
-            try:
-                context_docs = query_pinecone_db(
-                    pinecone=pinecone,
-                    index_name=index_name,
-                    query=user_query,
-                    model=embedding_model,
-                    top_k=top_k
-                )
-
-                context = "\n\n".join(context_docs)
-                st.caption(f"📄 Found {len(context_docs)} relevant documents")
-
-            except Exception as e:
-                st.error(f"Error retrieving context: {str(e)}")
-                context = ""
-
-        # Generate response
-        with st.spinner("💭 Generating response..."):
-            try:
-                response = chain.invoke({
-                    "question": user_query,
-                    "context": context
-                })
-
-                response_text = response.content
-
-                st.markdown(response_text)
-
-                # Show retrieved context in expander
-                if context:
-                    with st.expander("📄 Retrieved Context"):
-                        st.text(context)
-
-                # Add assistant message to chat history
-                st.session_state.messages.append({
-                    "role": "assistant",
-                    "content": response_text,
-                    "context": context
-                })
-
-            except Exception as e:
-                error_msg = f"Error generating response: {str(e)}"
-                st.error(error_msg)
-                st.session_state.messages.append({
-                    "role": "assistant",
-                    "content": error_msg
-                })
-
-# Footer
 st.divider()
 st.markdown(
     """
     <div style='text-align: center; color: gray; font-size: 0.8em;'>
-        Powered by 🤖 Groq • 📌 Pinecone • 🦜 LangChain
+        Powered by 🤖 Groq LLM • 📌 Pinecone • 🦜 LangChain Agents • 🤗 Jina Embeddings
     </div>
     """,
     unsafe_allow_html=True

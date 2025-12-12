@@ -49,8 +49,26 @@ Go to `http://localhost:8501` in your web browser to interact with the chatbot. 
 
 ![Chatbot Interface](assets/thumb.png)
 
-## Run the Agentic Q&A Application
+## Agentic Q&A Application
 
+The agent will:
+
+- Identify the name of the person in the user's question.
+- Search the corresponding Pinecone index for that person's CV.
+- If no name is found, it will default to a predefined name (e.g., "Maxim Dorogov").
+- If more than one name is found, it will search all relevant indexes and combine the information.
+
+### Setup Pinecone Index with Document Embeddings
+
+You need to create an index per curriculum in the dataset. Run the following script to create multiple indexes, one for each CV in the `dataset/` folder:
+
+
+```sh
+python db_builder_multifile.py -d ./dataset/ -m jinaai/jina-embeddings-v2-small-en -v
+```
+>NOTE: All resumes in the dataset folder must be named as `cv-<name>-<surname>`.
+
+## Run the Agentic Q&A Application
 Export the necessary API keys:
 
 ```sh
@@ -63,3 +81,9 @@ Run the app:
 ```sh
 streamlit run streamlit_agentic_chatbot.py
 ```
+
+Go to `http://localhost:8501` in your web browser to interact with the chatbot.
+
+Click here to watch the demo video on YouTube:
+
+[![Watch the video](https://img.youtube.com/vi/HqlSSUO1GDA/maxresdefault.jpg)](https://www.youtube.com/watch?v=HqlSSUO1GDA)
